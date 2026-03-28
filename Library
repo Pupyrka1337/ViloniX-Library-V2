@@ -1,153 +1,273 @@
--- ViloniX Library v2.5 (UPGRADED)
+-- ViloniX Library v2.5 by ViloniX
 
 local ViloniX = {}
 ViloniX.__index = ViloniX
 
+-- ═══════════════════════════════════════════
 -- FLAGS + CONFIG
+-- ═══════════════════════════════════════════
 ViloniX.Flags = {}
+
 ViloniX.Config = {
-    Enabled = false,
+    Enabled = false,     -- включить конфиги
     Folder = "ViloniXConfigs",
     File = "default"
 }
 
-local HttpService = game:GetService("HttpService")
+-- ═══════════════════════════════════════════
+-- SERVICES
+-- ═══════════════════════════════════════════
+local Players       = game:GetService("Players")
+local TweenService  = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService    = game:GetService("RunService")
+local HttpService   = game:GetService("HttpService")
+local CoreGui       = game:GetService("CoreGui")
 
--- CONFIG SYSTEM
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+-- ═══════════════════════════════════════════
+-- UTILITY / CONFIG FUNCTIONS
+-- ═══════════════════════════════════════════
+
 function ViloniX:SetConfig(cfg)
     self.Config = cfg
 end
 
 function ViloniX:SaveConfig()
     if not self.Config.Enabled then return end
-    
     if makefolder and not isfolder(self.Config.Folder) then
-        makefolder(self.Config.Folder)
+        pcall(function() makefolder(self.Config.Folder) end)
     end
-    
-    writefile(
-        self.Config.Folder.."/"..self.Config.File..".json",
-        HttpService:JSONEncode(self.Flags)
-    )
+    local data = HttpService:JSONEncode(self.Flags)
+    pcall(function()
+        writefile(self.Config.Folder.."/"..self.Config.File..".json", data)
+    end)
 end
 
 function ViloniX:LoadConfig()
     if not self.Config.Enabled then return end
-    
     local path = self.Config.Folder.."/"..self.Config.File..".json"
-    
     if isfile and isfile(path) then
-        local data = HttpService:JSONDecode(readfile(path))
-        for k,v in pairs(data) do
+        local content = readfile(path)
+        local decoded = HttpService:JSONDecode(content)
+        for k,v in pairs(decoded) do
             self.Flags[k] = v
         end
     end
 end
 
--- KEY SYSTEM (МОЖНО ВЫКЛЮЧИТЬ)
-function ViloniX:KeySystem(cfg)
-    if cfg and cfg.Enabled == false then return true end
-    
-    local Keys = cfg.Keys or {"FREE123"}
-    
-    local input = Keys[1] -- упрощённо
-    
-    if table.find(Keys, input) then
-        return true
-    end
+-- Fast tween
+local function QuickTween(obj, t, props)
+    TweenService:Create(obj, TweenInfo.new(t, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), props):Play()
 end
 
--- WINDOW
-function ViloniX:CreateWindow(cfg)
-    local Window = {}
-    
-    function Window:CreateTab()
-        local Tab = {}
-        
-        -- SLIDER
-        function Tab:CreateSlider(cfg)
-            local flag = cfg.Flag or cfg.Name
-            local Value = cfg.CurrentValue or 0
-            local Min = cfg.Range[1]
-            local Max = cfg.Range[2]
-            
-            if ViloniX.Flags[flag] then
-                Value = ViloniX.Flags[flag]
+-- Clamps value
+local function clamp(val, min, max)
+    return val < min and min or (val > max and max or val)
+end
+
+-- ═══════════════════════════════════════════
+-- ROOT GUI
+-- ═══════════════════════════════════════════
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ViloniXLibrary"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.IgnoreGuiInset = true
+
+local ok = pcall(function()
+    ScreenGui.Parent = CoreGui
+end)
+if not ok then
+    ScreenGui.Parent = LocalPlayer.PlayerGui
+end
+
+-- ═══════════════════════════════════════════
+-- KEY SYSTEM (can be disabled)
+-- ═══════════════════════════════════════════
+function ViloniX:KeySystem(config)
+    config = config or {}
+
+    if config.Enabled == false then
+        return true
+    end
+
+    local Keys = config.Keys or {}
+    local Title = config.Title or "Key Required"
+    local SubTitle = config.SubTitle or ""
+    local Note = config.Note or ""
+    local FileName = config.FileName or "ViloniXKey"
+    local SaveKey = config.SaveKey ~= false
+
+    -- check saved
+    if SaveKey then
+        local saved = nil
+        if isfile and readfile then
+            if isfile(FileName..".txt") then
+                saved = readfile(FileName..".txt")
             end
-            
-            ViloniX.Flags[flag] = Value
-            
-            local function set(v)
-                v = math.clamp(v, Min, Max)
-                Value = v
-                ViloniX.Flags[flag] = v
+        end
+        if saved and table.find(Keys, saved) then
+            return true
+        end
+    end
+
+    local passed = false
+
+    local overlay = Instance.new("Frame")
+    overlay.Size = UDim2.fromScale(1,1)
+    overlay.BackgroundTransparency = 0.45
+    overlay.BackgroundColor3 = Color3.new(0,0,0)
+    overlay.Parent = ScreenGui
+
+    local window = Instance.new("Frame")
+    window.Size = UDim2.fromOffset(420,220)
+    window.Position = UDim2.new(0.5,0,0.5,0)
+    window.AnchorPoint = Vector2.new(0.5,0.5)
+    window.BackgroundColor3 = Color3.fromRGB(25,25,25)
+    window.Parent = overlay
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size = UDim2.new(1,0,0,30)
+    titleLbl.Position = UDim2.fromOffset(0,10)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Text = Title
+    titleLbl.TextColor3 = Color3.new(1,1,1)
+    titleLbl.Font = Enum.Font.GothamBold
+    titleLbl.TextSize = 20
+    titleLbl.Parent = window
+
+    local input = Instance.new("TextBox")
+    input.Size = UDim2.new(1,-40,0,32)
+    input.Position = UDim2.fromOffset(20,60)
+    input.PlaceholderText = "Enter Key..."
+    input.TextColor3 = Color3.new(1,1,1)
+    input.Parent = window
+
+    local submit = Instance.new("TextButton")
+    submit.Size = UDim2.new(1,-40,0,32)
+    submit.Position = UDim2.fromOffset(20,110)
+    submit.Text = "Submit"
+    submit.Parent = window
+
+    local status = Instance.new("TextLabel")
+    status.Position = UDim2.fromOffset(20,150)
+    status.Size = UDim2.new(1,-40,0,18)
+    status.TextColor3 = Color3.new(1,0,0)
+    status.Parent = window
+
+    submit.MouseButton1Click:Connect(function()
+        local key = input.Text
+        if table.find(Keys, key) then
+            if SaveKey then
+                pcall(function() writefile(FileName..".txt", key) end)
+            end
+            status.TextColor3 = Color3.new(0,1,0)
+            status.Text = "Key Accepted"
+            task.wait(0.35)
+            overlay:Destroy()
+            passed = true
+        else
+            status.Text = "Invalid Key"
+        end
+    end)
+
+    repeat task.wait() until passed
+    return true
+end
+
+-- ═══════════════════════════════════════════
+-- WINDOW
+-- ═══════════════════════════════════════════
+function ViloniX:CreateWindow(config)
+    config = config or {}
+    local Win = {}
+
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = config.Size or UDim2.fromOffset(600,400)
+    mainFrame.Position = UDim2.new(0.5,0,0.5,0)
+    mainFrame.AnchorPoint = Vector2.new(0.5,0.5)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    mainFrame.Parent = ScreenGui
+
+    function Win:CreateTab(name)
+        local Tab = {}
+
+        function Tab:CreateSlider(cfg)
+            cfg = cfg or {}
+            local Name = cfg.Name or "Slider"
+            local Range = cfg.Range or {0,100}
+            local Min,Max = Range[1],Range[2]
+            local Flag = cfg.Flag or Name
+            local Value = ViloniX.Flags[Flag] or cfg.CurrentValue or Min
+
+            ViloniX.Flags[Flag] = Value
+
+            local element = {}
+            function element:Set(v)
+                v = clamp(v, Min, Max)
+                ViloniX.Flags[Flag] = v
                 cfg.Callback(v)
                 ViloniX:SaveConfig()
             end
-            
-            return {
-                Set = function(self,v) set(v) end
-            }
+            return element
         end
-        
-        -- TOGGLE
+
         function Tab:CreateToggle(cfg)
-            local flag = cfg.Flag or cfg.Name
-            local Value = cfg.CurrentValue or false
-            
-            if ViloniX.Flags[flag] ~= nil then
-                Value = ViloniX.Flags[flag]
+            cfg = cfg or {}
+            local Flag = cfg.Flag or cfg.Name
+            local Value = ViloniX.Flags[Flag]
+            if Value == nil then Value = cfg.CurrentValue or false end
+            ViloniX.Flags[Flag] = Value
+
+            local element = {}
+            function element:Set(v)
+                ViloniX.Flags[Flag] = v
+                cfg.Callback(v)
+                ViloniX:SaveConfig()
             end
-            
-            ViloniX.Flags[flag] = Value
-            
-            return {
-                Set = function(self,v)
-                    Value = v
-                    ViloniX.Flags[flag] = v
-                    cfg.Callback(v)
-                    ViloniX:SaveConfig()
-                end
-            }
+            return element
         end
-        
-        -- DROPDOWN
+
         function Tab:CreateDropdown(cfg)
-            local flag = cfg.Flag or cfg.Name
-            local Value = cfg.CurrentOption[1]
-            
-            if ViloniX.Flags[flag] then
-                Value = ViloniX.Flags[flag]
+            cfg = cfg or {}
+            local Flag = cfg.Flag or cfg.Name
+            local Value = ViloniX.Flags[Flag] or (cfg.CurrentOption and cfg.CurrentOption[1]) or cfg.Options[1]
+            ViloniX.Flags[Flag] = Value
+
+            local element = {}
+            function element:Set(v)
+                ViloniX.Flags[Flag] = v
+                cfg.Callback(v)
+                ViloniX:SaveConfig()
             end
-            
-            ViloniX.Flags[flag] = Value
-            
-            return {
-                Set = function(self,v)
-                    ViloniX.Flags[flag] = v
-                    cfg.Callback(v)
-                    ViloniX:SaveConfig()
-                end
-            }
+            return element
         end
-        
-        -- BUTTON
+
         function Tab:CreateButton(cfg)
-            return {
-                Fire = function()
-                    cfg.Callback()
-                end
-            }
+            cfg = cfg or {}
+            local element = {}
+            function element:Fire()
+                cfg.Callback()
+            end
+            return element
         end
-        
+
         return Tab
     end
-    
-    function Window:Notify(cfg)
-        print(cfg.Title..": "..cfg.Content)
+
+    function Win:Notify(cfg)
+        cfg = cfg or {}
+        print("[ViloniX Notify] "..(cfg.Title or "")..": "..(cfg.Content or ""))
     end
-    
-    return Window
+
+    function Win:Toggle()
+        mainFrame.Visible = not mainFrame.Visible
+    end
+
+    return Win
 end
 
 return ViloniX
