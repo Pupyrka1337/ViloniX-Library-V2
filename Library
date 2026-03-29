@@ -6,7 +6,6 @@
 local Players          = game:GetService("Players")
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local HttpService      = game:GetService("HttpService")
 local CoreGui          = game:GetService("CoreGui")
 
 local LP    = Players.LocalPlayer
@@ -155,21 +154,7 @@ local function Ripple(p,x,y,c)
 end
 
 local FW=function(p,d) pcall(function() if writefile then writefile(p,d) end end) end
-local FR=function(p)
-    local ok,r=pcall(function() if readfile and isfile and isfile(p) then return readfile(p) end end)
-    return ok and r or nil
-end
-local FMD=function(f) pcall(function() if makefolder and not(isfolder and isfolder(f)) then makefolder(f) end end) end
-local FLS=function(f)
-    local ok,r=pcall(function()
-        if listfiles and isfolder then
-            if not isfolder(f) then if makefolder then makefolder(f) end end
-            return listfiles(f)
-        end
-    end)
-    return (ok and r) or {}
-end
-local FDL=function(p) pcall(function() if delfile then delfile(p) end end) end
+local FR=function(p) local ok,r=pcall(function() if readfile and isfile and isfile(p) then return readfile(p) end end); return ok and r or nil end
 
 -- ════════════════════════════════════════════════════════
 -- УВЕДОМЛЕНИЯ
@@ -316,12 +301,10 @@ function ViloniX:CreateWindow(cfg)
     local TW2=cfg.TabWidth or 155
     local WS=cfg.Size or UDim2.fromOffset(570,390)
     local TK=cfg.ToggleKey or Enum.KeyCode.RightControl
-    local CF=cfg.ConfigFolder or "ViloniX"
     local T=Themes[cfg.Theme or "Default"] or Themes.Default
-    local TL,ER,ActiveTab={},{},nil
+    local TL,ActiveTab={},nil
     local hidden,minimized=false,false
 
-    local function Reg(id,g,s) ER[id]={Get=g,Set=s} end
     local function OT(fn) table.insert(TL,fn) end
     local function FT() for _,f in ipairs(TL) do pcall(f,T) end end
 
@@ -366,13 +349,25 @@ function ViloniX:CreateWindow(cfg)
         minimized=not minimized; TW(mf,0.3,{Size=minimized and UDim2.fromOffset(WS.X.Offset,44) or WS},Enum.EasingStyle.Quart)
     end)
     bHd.MouseButton1Click:Connect(function()
-        hidden=not hidden; mf.ClipsDescendants=not hidden
-        TW(mf,0.2,{BackgroundTransparency=hidden and 1 or 0}); topbar.Visible=not hidden
+        hidden=not hidden
+        if hidden then
+            TW(mf,0.2,{BackgroundTransparency=1})
+            task.delay(0.22,function() mf.Visible=false end)
+        else
+            mf.Visible=true; mf.BackgroundTransparency=1
+            TW(mf,0.2,{BackgroundTransparency=0})
+        end
     end)
     UserInputService.InputBegan:Connect(function(inp,gpe)
         if not gpe and inp.KeyCode==TK then
-            hidden=not hidden; mf.ClipsDescendants=not hidden
-            TW(mf,0.2,{BackgroundTransparency=hidden and 1 or 0}); topbar.Visible=not hidden
+            hidden=not hidden
+            if hidden then
+                TW(mf,0.2,{BackgroundTransparency=1})
+                task.delay(0.22,function() mf.Visible=false end)
+            else
+                mf.Visible=true; mf.BackgroundTransparency=1
+                TW(mf,0.2,{BackgroundTransparency=0})
+            end
         end
     end)
     MkDrag(mf,topbar)
@@ -408,8 +403,15 @@ function ViloniX:CreateWindow(cfg)
     function Window:SetTheme(n)
         local nt=Themes[n]; if not nt then return end; T=nt; FT()
     end
-    function Window:Toggle() hidden=not hidden; mf.ClipsDescendants=not hidden
-        TW(mf,0.2,{BackgroundTransparency=hidden and 1 or 0}); topbar.Visible=not hidden
+    function Window:Toggle()
+        hidden=not hidden
+        if hidden then
+            TW(mf,0.2,{BackgroundTransparency=1})
+            task.delay(0.22,function() mf.Visible=false end)
+        else
+            mf.Visible=true; mf.BackgroundTransparency=1
+            TW(mf,0.2,{BackgroundTransparency=0})
+        end
     end
     function Window:Notify(c) c=c or {}; c.Theme=T; table.insert(NQ,c); ProcN() end
     function Window:Watermark(c)
@@ -425,24 +427,6 @@ function ViloniX:CreateWindow(cfg)
         MkDrag(wm,wm)
         OT(function(nt) TW(wm,0.2,{BackgroundColor3=nt.Surface}); TW(ws,0.2,{Color=nt.Accent}); TW(wl,0.2,{TextColor3=nt.Text}) end)
     end
-    function Window:SaveConfig(name)
-        name=name or "default"; FMD(CF)
-        local d={}; for id,r in pairs(ER) do local ok,v=pcall(r.Get); if ok then d[id]=v end end
-        FW(CF.."/"..name..".json",HttpService:JSONEncode(d))
-    end
-    function Window:LoadConfig(name)
-        name=name or "default"; local raw=FR(CF.."/"..name..".json")
-        if not raw then return false end
-        local ok,d=pcall(function() return HttpService:JSONDecode(raw) end)
-        if not ok then return false end
-        for id,v in pairs(d) do if ER[id] then pcall(ER[id].Set,v) end end; return true
-    end
-    function Window:ListConfigs()
-        local list={}; for _,f in ipairs(FLS(CF)) do
-            local n=f:match("([^/\\]+)%.json$"); if n then table.insert(list,n) end
-        end; return list
-    end
-    function Window:DeleteConfig(name) FDL(CF.."/"..name..".json") end
     function Window:Destroy() ScreenGui:Destroy() end
 
     -- ════════════════════════════════════════════════════
@@ -572,7 +556,6 @@ function ViloniX:CreateWindow(cfg)
 
         function Tab:CreateProgressBar(c) c=c or {}
             local N2=c.Name or "Progress"; local Val=math.clamp(c.Value or 0,0,100); local Suf=c.Suffix or "%"
-            local id=c.Id or (N2..tostring(math.random(1,999999))); local e=El(50)
             NL(e,N2,12,8,220)
             local vl=Instance.new("TextLabel",e); vl.Size=UDim2.fromOffset(55,18); vl.Position=UDim2.new(1,-65,0,8)
             vl.BackgroundTransparency=1; vl.Text=tostring(Val)..Suf; vl.TextColor3=T.TextDim; vl.Font=Enum.Font.Gotham; vl.TextSize=11; vl.TextXAlignment=Enum.TextXAlignment.Right; vl.ZIndex=14
@@ -582,13 +565,13 @@ function ViloniX:CreateWindow(cfg)
             local fill=Instance.new("Frame",track); fill.Size=UDim2.fromScale(Val/100,1); fill.BackgroundColor3=c.Color or T.Accent; fill.BorderSizePixel=0; fill.ZIndex=15
             Instance.new("UICorner",fill).CornerRadius=UDim.new(1,0)
             local obj={Set=function(_,v) v=math.clamp(v,0,100); Val=v; TW(fill,0.25,{Size=UDim2.fromScale(v/100,1)}); vl.Text=tostring(v)..Suf end, Get=function() return Val end}
-            Reg(id,obj.Get,function(v) obj:Set(tonumber(v) or 0) end); return obj
+            return obj
         end
 
         function Tab:CreateSlider(c) c=c or {}
             local N2=c.Name or "Slider"; local Min=c.Range and c.Range[1] or 0; local Max=c.Range and c.Range[2] or 100
             local Inc=c.Increment or 1; local Suf=c.Suffix or ""; local Val=math.clamp(c.CurrentValue or Min,Min,Max)
-            local CB=c.Callback or function()end; local id=c.Id or (N2..tostring(math.random(1,999999)))
+            local CB=c.Callback or function()end;
             local e=El(56); NL(e,N2,12,8,220)
             local vl=Instance.new("TextLabel",e); vl.Size=UDim2.fromOffset(60,18); vl.Position=UDim2.new(1,-70,0,8)
             vl.BackgroundTransparency=1; vl.Text=tostring(Val)..Suf; vl.TextColor3=T.TextDim; vl.Font=Enum.Font.Gotham; vl.TextSize=11; vl.TextXAlignment=Enum.TextXAlignment.Right; vl.ZIndex=14
@@ -611,13 +594,12 @@ function ViloniX:CreateWindow(cfg)
             track.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=true; upd(i) end end)
             UserInputService.InputChanged:Connect(function(i) if drag and i.UserInputType==Enum.UserInputType.MouseMovement then upd(i) end end)
             UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=false end end)
-            local obj={Set=function(_,v) v=math.clamp(v,Min,Max); Val=v; local p=(v-Min)/(Max-Min); TW(fill,0.1,{Size=UDim2.fromScale(p,1)}); TW(knob,0.1,{Position=UDim2.new(p,0,0.5,0)}); vl.Text=tostring(v)..Suf end, Get=function() return Val end}
-            Reg(id,obj.Get,function(v) obj:Set(tonumber(v) or Min) end); return obj
+            local obj={Set=function(_,v) v=math.clamp(v,Min,Max); Val=v; local p=(v-Min)/(Max-Min); TW(fill,0.1,{Size=UDim2.fromScale(p,1)}); TW(knob,0.1,{Position=UDim2.new(p,0,0.5,0)}); vl.Text=tostring(v)..Suf end, Get=function() return Val end} return obj
         end
 
         function Tab:CreateToggle(c) c=c or {}
             local N2=c.Name or "Toggle"; local Desc=c.Description or ""; local Val=c.CurrentValue or false
-            local CB=c.Callback or function()end; local id=c.Id or (N2..tostring(math.random(1,999999)))
+            local CB=c.Callback or function()end;
             local e=El(Desc~="" and 52 or 40); NL(e,N2,12,Desc~="" and 8 or 11,220)
             if Desc~="" then DL(e,Desc,12,28,220) end
             local tb2=Instance.new("TextButton",e); tb2.Size=UDim2.fromOffset(32,32); tb2.AnchorPoint=Vector2.new(1,0.5); tb2.Position=UDim2.new(1,-12,0.5,0); tb2.BackgroundColor3=Val and T.ToggleOn or T.ToggleOff; tb2.BorderSizePixel=0; tb2.Text=""; tb2.ZIndex=14
@@ -630,14 +612,13 @@ function ViloniX:CreateWindow(cfg)
                 Ripple(e,Mouse.X,Mouse.Y,T.Accent); pcall(CB,Val)
             end)
             OT(function(nt) TW(tb2,0.18,{BackgroundColor3=Val and nt.ToggleOn or nt.ToggleOff}); TW(ts,0.18,{Color=Val and nt.Accent or nt.Border}) end)
-            local obj={Set=function(_,v) Val=v; chk.Visible=v; TW(tb2,0.18,{BackgroundColor3=v and T.ToggleOn or T.ToggleOff}); TW(ts,0.18,{Color=v and T.Accent or T.Border}) end, Get=function() return Val end}
-            Reg(id,obj.Get,function(v) obj:Set(v==true or v=="true") end); return obj
+            local obj={Set=function(_,v) Val=v; chk.Visible=v; TW(tb2,0.18,{BackgroundColor3=v and T.ToggleOn or T.ToggleOff}); TW(ts,0.18,{Color=v and T.Accent or T.Border}) end, Get=function() return Val end} return obj
         end
 
         -- DROPDOWN — popup на PopupLayer
         function Tab:CreateDropdown(c) c=c or {}
             local N2=c.Name or "Dropdown"; local Opts=c.Options or {}; local Multi=c.MultipleOptions or false
-            local CB=c.Callback or function()end; local id=c.Id or (N2..tostring(math.random(1,999999)))
+            local CB=c.Callback or function()end;
             local Cur=(c.CurrentOption and c.CurrentOption[1]) or (Opts[1] or "None"); local selM={}
             local e=El(40); local open=false; local OPT_H=30; local conn
             NL(e,N2,12,0,180)
@@ -705,8 +686,7 @@ function ViloniX:CreateWindow(cfg)
                     end
                 end
             end)
-            local obj={Set=function(_,v) Cur=v; curL.Text=v; build() end, Refresh=function(_,no) Opts=no; build() end, Get=function() return Cur end}
-            Reg(id,obj.Get,function(v) obj:Set(v) end); return obj
+            local obj={Set=function(_,v) Cur=v; curL.Text=v; build() end, Refresh=function(_,no) Opts=no; build() end, Get=function() return Cur end} return obj
         end
 
         function Tab:CreateButton(c) c=c or {}
@@ -722,7 +702,6 @@ function ViloniX:CreateWindow(cfg)
 
         function Tab:CreateInput(c) c=c or {}
             local N2=c.Name or "Input"; local PH=c.PlaceholderText or "Введи текст..."; local Def=c.Default or ""; local CB=c.Callback or function()end
-            local id=c.Id or (N2..tostring(math.random(1,999999))); local e=El(58); NL(e,N2,12,6,220)
             local ibg=Instance.new("Frame",e); ibg.Size=UDim2.new(1,-22,0,26); ibg.Position=UDim2.fromOffset(11,26); ibg.BackgroundColor3=T.Background; ibg.BorderSizePixel=0; ibg.ZIndex=14
             Instance.new("UICorner",ibg).CornerRadius=UDim.new(0,6)
             local ibs=Instance.new("UIStroke",ibg); ibs.Color=T.Border; ibs.Thickness=1
@@ -731,13 +710,11 @@ function ViloniX:CreateWindow(cfg)
             OT(function(nt) TW(tb3,0.18,{TextColor3=nt.Text}); tb3.PlaceholderColor3=nt.TextDim end)
             tb3.Focused:Connect(function() TW(ibs,0.12,{Color=T.Accent}) end)
             tb3.FocusLost:Connect(function(enter) TW(ibs,0.12,{Color=T.Border}); if enter then pcall(CB,tb3.Text) end end)
-            local obj={Set=function(_,v) tb3.Text=v end, Get=function() return tb3.Text end}
-            Reg(id,obj.Get,function(v) obj:Set(v) end); return obj
+            local obj={Set=function(_,v) tb3.Text=v end, Get=function() return tb3.Text end} return obj
         end
 
         function Tab:CreateKeybind(c) c=c or {}
             local N2=c.Name or "Keybind"; local Def=c.CurrentKeybind or "F"; local CB=c.Callback or function()end
-            local id=c.Id or (N2..tostring(math.random(1,999999))); local e=El(40); NL(e,N2,12,0,220)
             local listening=false; local cur=Def
             local kb2=Instance.new("TextButton",e); kb2.Size=UDim2.fromOffset(74,26); kb2.AnchorPoint=Vector2.new(1,0.5); kb2.Position=UDim2.new(1,-10,0.5,0); kb2.BackgroundColor3=T.Background; kb2.BorderSizePixel=0; kb2.Text="[ "..cur.." ]"; kb2.TextColor3=T.Accent; kb2.Font=Enum.Font.GothamBold; kb2.TextSize=11; kb2.ZIndex=14
             Instance.new("UICorner",kb2).CornerRadius=UDim.new(0,6)
@@ -753,14 +730,12 @@ function ViloniX:CreateWindow(cfg)
                     if inp.KeyCode.Name==cur then pcall(CB) end
                 end
             end)
-            local obj={Set=function(_,v) cur=v; kb2.Text="[ "..v.." ]" end, Get=function() return cur end}
-            Reg(id,obj.Get,function(v) obj:Set(v) end); return obj
+            local obj={Set=function(_,v) cur=v; kb2.Text="[ "..v.." ]" end, Get=function() return cur end} return obj
         end
 
         -- COLOR PICKER — popup на PopupLayer
         function Tab:CreateColorPicker(c) c=c or {}
             local N2=c.Name or "Color"; local Def=c.Default or Color3.fromRGB(210,0,255); local CB=c.Callback or function()end
-            local id=c.Id or (N2..tostring(math.random(1,999999))); local Val=Def; local H,S,V2=Color3.toHSV(Def); local popen=false
             local e=El(40); NL(e,N2,12,0,200)
             local prev=Instance.new("TextButton",e); prev.Size=UDim2.fromOffset(32,24); prev.AnchorPoint=Vector2.new(1,0.5); prev.Position=UDim2.new(1,-10,0.5,0); prev.BackgroundColor3=Val; prev.BorderSizePixel=0; prev.Text=""; prev.ZIndex=14
             Instance.new("UICorner",prev).CornerRadius=UDim.new(0,6)
@@ -817,7 +792,6 @@ function ViloniX:CreateWindow(cfg)
                 Set=function(_,col) Val=col; H,S,V2=Color3.toHSV(col); prev.BackgroundColor3=col; svF.BackgroundColor3=Color3.fromHSV(H,1,1); cur2.Position=UDim2.new(S,0,1-V2,0); hKn.Position=UDim2.new(H,0,0.5,0); hxBox.Text=toHx(col) end,
                 Get=function() return Val end,
             }
-            Reg(id,function() return {Val.R,Val.G,Val.B} end,function(v) if type(v)=="table" then obj:Set(Color3.new(v[1],v[2],v[3])) end end)
             return obj
         end
 
